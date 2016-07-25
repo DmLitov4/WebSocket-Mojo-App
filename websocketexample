@@ -1,0 +1,63 @@
+#!/usr/bin/env perl
+use utf8;
+use Mojolicious::Lite;
+use Mojo::EventEmitter;
+
+helper events => sub { state $events = Mojo::EventEmitter->new };
+    
+get '/1' => 'server';
+get '/2' => 'client';
+get '/'  => 'client';
+    
+websocket '/test' => sub {
+    my $self = shift;
+    $self->inactivity_timeout(3600);
+
+    $self->on(message => sub { 
+        my @alphabet = ('A'..'F', '0'..'9');
+        $self->events->emit(colornew => "#" . (join '', map $alphabet[rand @alphabet], 0..5)) 
+      });
+
+    my $cb = $self->events->on(colornew => sub { $self->send(pop) });
+};
+
+app->start;
+
+__DATA__
+
+@@layouts/default.html.ep
+<!DOCTYPE html>
+<html>
+     <head>
+        <title> WebSocket App </title>
+     </head>
+     <body>
+         <center><h3> Welcome to WebSocket App! </h3></center>
+         <script>
+             var ws = new WebSocket('<%= url_for('test')->to_abs %>');   
+         </script>
+         <%= content %>
+     </body>
+</html>
+
+@@ server.html.ep
+%layout 'default';
+%title 'server'; 
+<script>
+  function nextColor() {
+    ws.send('change');
+};
+</script>
+<center><button onclick='nextColor()'>Change color again!</button></center>
+
+@@ client.html.ep
+%layout 'default';
+%title 'client';
+
+<script>
+ws.onmessage = function (event) {
+    var data = event.data;
+    document.getElementById("square").style.backgroundColor = event.data;
+};
+</script>
+<center><div id="square" style="width:400px; height:400px;background:red;"></div></center>
